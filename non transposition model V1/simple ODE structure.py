@@ -11,11 +11,7 @@ Y
 (R_CP0) resistant cells with ARG on chromosome + plasmid with no ARG
 
 (R_CP1) resistant cells with ARG on chromosome + plasmid with ARG
-we are working from the previous model created by Arya et al 2021
-i believe this does not include seperate effects for ARG on chromosomes
-vs plasmids.
 
-We can start with the susceptible cell since that contains ARG on neither
 """
 
 import numpy as np
@@ -27,7 +23,7 @@ def hill_E(c, Emax, H, MIC):
     return 1 - Emax * c**H / (MIC**H + c**H)
 
 
-c = 10.0
+c = 2
 Emax, H = 2.0, 2.0
 MICs, MICr = 8.0, 2000.0
 
@@ -36,35 +32,73 @@ Er = hill_E(c, Emax, H, MICr)
 
 
 def amrmodel(x, t, params):
-    r, Nmax, Es, Er, deltaS, deltaR, beta, alpha, epsil = params
-    S, R = x
+    r, Nmax, Es, Er, deltaMS, deltaMR, beta, alpha_P,alpha_Rp, alpha_Rc, epsil = params
+    S, S_P0, R_P1, R_C, R_CP0,R_CP1 = x
 
-    N = S + R
+    N = S, S_P0, R_P1, R_C, R_CP0,R_CP1
+    
     growth = r * (1 - N / Nmax)
-    conj = beta * S * R / N
-    divR = growth * (1 - alpha) * Er * R
+    conjSxS_P0 = beta * S * (S_P0 +R_CP0) / N
+    
+    conjSxR_P1 = beta * S * (R_P1 +R_CP1) / N
+    
+    conjR_CxR_CP0 = beta * R_C * (S_P0 +R_CP0) / N
+    
+    conjR_CxR_CP1 = beta * R_C * (R_P1 +R_CP1) / N
+    
+    segrS_P0xS = growth * (1 - (alpha_P)) * Es * S_P0
+    
+    segrR_P1xS = growth * (1 - (alpha_P + alpha_Rp)) * Er * R_P1
+    
+    segrR_CP0xR_C = growth * (1 - (alpha_P + alpha_Rc)) * Er * R_CP0
+    
+    segrR_CP1xR_C = growth * (1 - (alpha_P + alpha_Rc + alpha_Rp)) * Er * R_CP1
 
     dS = (growth * Es * S
-          - deltaS * S
-          - conj
-          + epsil * divR)
+          - deltaMS * S
+          - conjSxS_P0
+          - conjSxR_P1
+          + epsil * segrS_P0xS
+          + epsil * segrR_P1xS)
 
-    dR = ((1 - epsil) * divR
-          - deltaR * R
-          + conj)
+    dS_P0 = ((1 - epsil) * segrS_P0xS
+          - deltaMR * S_P0
+          + conjSxS_P0)
+    
+    dR_P1 = ((1 - epsil) * segrR_P1xS
+          - deltaMR * R_P1
+          + conjSxR_P1)
+    
+    dR_C = (growth * Er * R_C
+          - deltaMS * R_C
+          - conjR_CxR_CP0
+          - conjR_CxR_CP1
+          + epsil * segrR_CP0xR_C
+          + epsil * segrR_CP1xR_C)
+    
+    dR_CP0 = ((1 - epsil) * segrR_CP0xR_C
+          - deltaMR * R_CP0
+          + conjR_CxR_CP0)
+    
+    dR_CP1 = ((1 - epsil) * segrR_CP1xR_C
+          - deltaMR * R_CP1
+          + conjR_CxR_CP1)
 
-    return [dS, dR]
+    return [dS, dS_P0, dR_P1, dR_C, dR_CP0, dR_CP1]
 
 
 r = 0.5
 Nmax = 6.71e7
-deltaR = 0.025
-deltaS = deltaR * 3
+deltaMR = 0.025
+deltaMS = deltaMR * 1.02
 beta = 0.001
-alpha = 0.1
+alpha_P = 0
+alpha_Rp = 0
+alpha_Rc = 0
 epsil = 0.000144
 
-params = [r, Nmax, Es, Er, deltaS, deltaR, beta, alpha, epsil]
+params = [r, Nmax, Es, Er, deltaMS, deltaMR, beta,
+           alpha_P,alpha_Rc, alpha_Rp, epsil]
 
 x0 = [100, 100]
 
